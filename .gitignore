@@ -1,0 +1,12 @@
+# Build output of CMake, Visual Studio and .NET, and local Visual Studio settings
+build/
+out/
+bin/
+obj/
+x64/
+.vs/
+*.user
+
+# Python
+__pycache__/
+*.pyc
