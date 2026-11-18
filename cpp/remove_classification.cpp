@@ -70,7 +70,7 @@ lop::Declaration declare_remove_classification(bool const spanish)
         .id = "lop.example.remove_classification",
         .name = spanish ? "Quitar clasificación" : "Remove classification",
         .existing_tab_id = "lop.tab.classification",
-        .ribbon_section = spanish ? "Algoritmos básicos" : "Basic algorithms",
+        .ribbon_section = spanish ? "Utilidades" : "Utilities",
         .description = spanish ? "Asigna la clase 1 (sin clasificar) a los puntos de las nubes editables que conservan los índices del archivo original."
                                : "Assigns class 1 (unclassified) to the points of the editable clouds that keep the indices of the original file.",
         .icon_png = { std::begin(remove_classification_icon), std::end(remove_classification_icon) },

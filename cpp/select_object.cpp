@@ -180,7 +180,7 @@ lop::Declaration declare_select_object(bool const spanish)
         .id = "lop.example.select_object",
         .name = spanish ? "Seleccionar objeto" : "Select object",
         .existing_tab_id = "lop.tab.edit",
-        .ribbon_section = spanish ? "Algoritmos básicos" : "Basic algorithms",
+        .ribbon_section = spanish ? "Utilidades" : "Utilities",
         .description = spanish ? "Selecciona los puntos del objeto que pulses: los de su clase unidos a él. Después, bórralos o clasifícalos desde la pestaña Acciones."
                                : "Selects the points of the object you click: those of its class joined to it. Then delete or classify them from the Actions tab.",
         .icon_png = { std::begin(select_object_icon), std::end(select_object_icon) },

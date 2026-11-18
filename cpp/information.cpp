@@ -309,7 +309,7 @@ lop::Declaration declare_information(bool const spanish)
         .id = "lop.example.information",
         .name = spanish ? "Información" : "Information",
         .existing_tab_id = "lop.tab.view",
-        .ribbon_section = spanish ? "Algoritmos básicos" : "Basic algorithms",
+        .ribbon_section = spanish ? "Utilidades" : "Utilities",
         .description = spanish ? "Escribe en el panel de salida los recuentos de puntos por clase y estadísticas de cada nube abierta."
                                : "Writes to the Output panel the point counts by class and statistics of each open cloud.",
         .icon_png = { std::begin(information_icon), std::end(information_icon) },

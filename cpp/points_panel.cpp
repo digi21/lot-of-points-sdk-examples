@@ -123,7 +123,7 @@ namespace
 
 std::vector<lop::Declaration> declare_points_panel_commands(bool const spanish)
 {
-    auto const section = spanish ? "Algoritmos básicos" : "Basic algorithms";
+    auto const section = spanish ? "Utilidades" : "Utilities";
     return {
         lop::declare<ShowPointsPanelCommand>({
             .id = "lop.example.show_points_panel",

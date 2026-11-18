@@ -126,7 +126,7 @@ lop::Declaration declare_height_classifier(bool const spanish)
         .id = "lop.example.height_classifier",
         .name = spanish ? "Clasificar por altura" : "Classify by height",
         .existing_tab_id = "lop.tab.classification",
-        .ribbon_section = spanish ? "Algoritmos básicos" : "Basic algorithms",
+        .ribbon_section = spanish ? "Utilidades" : "Utilities",
         .description = spanish ? "Asigna la clase de suelo a los puntos que no superan la altura máxima sobre el mínimo de su celda y la otra clase a los que la superan."
                                : "Assigns the ground class to the points that do not exceed the maximum height above the minimum of their cell and the other class to the points that exceed it.",
         .icon_png = { std::begin(height_classifier_icon), std::end(height_classifier_icon) },
