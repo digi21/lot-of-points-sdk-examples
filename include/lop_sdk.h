@@ -499,21 +499,25 @@ typedef struct lop_task_host
      * or a folder that cannot be created. */
     int (*get_cloud_extension_data_directory_path)(void* context, uint32_t cloud_id, char const** directory_path);
 
-    /* Writes to las_file_path a LAS file of point format 2 with at most one point per cube, read from the level of detail of the local
+    /* Writes to las_file_path a LAS 1.4 file of point format 7 with at most one point per cube, read from the level of detail of the local
      * cloud cloud_id down to the nodes whose detail size is <= spacing_cloud_units. The cubes are aligned to the origin of the level of
      * detail: a point at world coordinates p is in the cube with indices floor((p[axis] - origin[axis]) / s), where s is
      * spacing_cloud_units converted to float, and each index must be between -1,048,576 and 1,048,575, inclusive. Each cube keeps the
-     * first point read, not the one nearest to its centre. The LAS header stores the origin as the X, Y and Z offsets, with scale
-     * factors 0.001. For each relative float coordinate r, the LAS stores the integer q = trunc(r * 1000.0f). The reconstructed
-     * relative coordinate 0.001 * q differs from r by less than 0.001 cloud units while the absolute value of r is below 16,777.216
-     * cloud units, and by up to 0.001 below 33,554.432, so the stored point can fall in a neighbouring cube. lop_tile::x, y and z minus
+     * first point read, not the one nearest to its centre. The LAS header stores the origin as the X, Y and Z offsets. The scale factor of
+     * the three axes is the first of 0.0001, 0.001 and 0.01 cloud units for which round(r / scale) fits in a signed 32-bit integer for
+     * every relative coordinate r of the written points, that is, for |r| up to 214,748.3647, 2,147,483.647 and 21,474,836.47 cloud
+     * units respectively. The relative coordinate r is the position stored as float in the level of detail, expressed relative to the origin of the main level of detail. For each r, the LAS stores
+     * the integer q = round(r / scale) computed in double precision, so the reconstructed relative coordinate scale * q differs from r
+     * by at most half the scale factor, and a point within that distance of a cube face can be stored in the neighbouring cube. lop_tile::x, y and z minus
      * the LAS offsets give the relative positions that the cubes use. Excludes deleted points and, while there is an isolation, the
-     * points outside it; writes the confirmed classes. Also reads the points that editing events confirmed at the moment of the reservation
+     * points outside it; writes the confirmed classes, from 0 to 255. Writes a temporary file next to las_file_path and renames it to
+     * las_file_path when the export completes, so a failure or a cancellation does not leave a partial file. Also reads the points that editing events confirmed at the moment of the reservation
      * have added to the cloud (see lop_cloud::added_point_count) and thins them in the same cubes as the other points, with
      * edits confirmed before the reservation applied, including edits confirmed after those points were added; the points of undone events are excluded. Reserves the cloud against closure until it returns and shows the fraction of
      * processed points from the selected nodes in the progress bar of the task. Returns LOP_OK, LOP_CANCELLED on cancellation or host
      * failure, or LOP_FAILED with a logged reason for a cloud that is not open, a remote cloud, a spacing that is not a finite number
-     * greater than 0 that fits in a float (<= FLT_MAX), a cube index outside that interval, an empty path or a write failure. */
+     * greater than 0 that fits in a float (<= FLT_MAX), a cube index outside that interval, a relative coordinate whose absolute value
+     * exceeds 21,474,836.47 cloud units, an empty path, a path that is the .index or .index.points file that the export reads, or a write failure. */
     int (*export_thinned_cloud)(void* context, uint32_t cloud_id, double spacing_cloud_units, char const* las_file_path);
 
     /* Assign, read and replace values and rows of a panel or dialog like the functions of lop_command_host with the same names. get_ui_value
@@ -1025,9 +1029,9 @@ typedef struct lop_command_host
      * clouds and 3D models with the same transformation as cloud_id, each with an unchecked check box. If the user confirms, lop writes
      * the transformation in "<original_path>.transform.json" of cloud_id and of the checked layers and completes the request with
      * accepted set to nonzero. If lop has written the transformation of at least one cloud, lop finishes the command
-     * (LOP_EVENT_LOST_FOCUS and LOP_EVENT_FINISH) right after completing the request. lop reopens the document with the new transformation
-     * of each changed cloud once the level of detail of that transformation exists: at once if it already exists, or when a background
-     * task creates it. The reopening delivers LOP_CLOUD_CLOSING and LOP_CLOUD_ADDED for every cloud and assigns new cloud IDs. Until then,
+     * (LOP_EVENT_LOST_FOCUS and LOP_EVENT_FINISH) right after completing the request. lop replaces each changed cloud in the document with a cloud with the new transformation
+     * once the level of detail of that transformation exists: at once if it already exists, or when a background
+     * task creates it. The replacement delivers LOP_CLOUD_CLOSING and then LOP_CLOUD_ADDED for that cloud and assigns it a new cloud ID; the other clouds keep their IDs. Until then,
      * the cloud stays open with its previous transformation and cloud ID; if the user cancels the background task or the creation fails,
      * lop restores the previous "<original_path>.transform.json". If the user closes the dialog, completes with accepted set to zero.
      * Completes with LOP_FAILED and a logged reason for a closed cloud, a remote cloud, a catalog cloud, a cloud reserved by a background
@@ -1268,8 +1272,9 @@ typedef struct lop_extension_host
     int (*mark_panel_for_attention)(void* context, char const* panel_id);
 } lop_extension_host;
 
-/* When lop reopens the document, lop delivers every LOP_CLOUD_CLOSING and then every LOP_CLOUD_ADDED, in Layers panel order; cloud is valid
- * until return. */
+/* When lop adds clouds to the document or removes clouds from it, lop delivers LOP_CLOUD_CLOSING for each cloud that lop closes and then
+ * LOP_CLOUD_ADDED for each cloud that lop opens, in Layers panel order; the clouds that stay open receive neither event and keep their IDs.
+ * cloud remains valid until the lop_cloud_event_function invocation returns. */
 typedef void (*lop_cloud_event_function)(void* user_data, uint32_t type, lop_cloud const* cloud, lop_extension_host const* host);
 
 /* Makes the panel panel_id the panel of the command owner_command_id, both declared by the same lop_extension. At application startup, lop neither shows

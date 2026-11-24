@@ -922,8 +922,9 @@ namespace lop
             return std::string{ directory_path };
         }
 
-        // Writes the thinned LAS file (see lop_task_host::export_thinned_cloud); the cubes are aligned to the origin of the level of detail,
-        // which the LAS header stores as its offsets. Returns false on cancellation or failure, with failures reported in the Output panel.
+        // Writes the thinned LAS 1.4 file of point format 7 (see lop_task_host::export_thinned_cloud); the cubes are aligned to the origin of the
+        // level of detail, which the LAS header stores as its offsets, and the scale factor is the first of 0.0001, 0.001 and 0.01 cloud units per integer unit for which every rounded relative coordinate fits in a
+        // signed 32-bit integer. Returns false on cancellation or failure, with failures reported in the Output panel.
         // Throws std::invalid_argument if spacing_cloud_units is non-finite, less than or equal to 0, or greater than
         // std::numeric_limits<float>::max().
         bool export_thinned_cloud(std::uint32_t const cloud_id, double const spacing_cloud_units, std::string_view const las_file_path) const
@@ -1738,8 +1739,8 @@ namespace lop
         // original_to_world_transform and, if crs_wkt is not empty, its coordinate reference system (see
         // lop_command_host::request_original_to_world_transform_change). Yields true if the user confirms and lop has written the
         // .transform.json file, false if the user closes the confirmation dialog, or std::nullopt if the command finishes first. After
-        // true, the command finishes; lop reopens the document when the level of detail of the new transformation exists, and then every
-        // cloud receives a new ID. Throws std::invalid_argument if the matrix is not a similarity with the rule of
+        // true, the command finishes; lop replaces the cloud in the document when the level of detail of the new transformation exists, and then that
+        // cloud receives a new ID; the other clouds keep their IDs. Throws std::invalid_argument if the matrix is not a similarity with the rule of
         // lop_command_host::request_original_to_world_transform_change.
         [[nodiscard]] detail::RequestAwaiter<bool> ask_original_to_world_transform_change(std::uint32_t const cloud_id,
             std::array<double, 16> const& original_to_world_transform, std::string_view const crs_wkt = {}) const
