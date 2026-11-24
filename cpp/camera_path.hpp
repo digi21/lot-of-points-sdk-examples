@@ -20,7 +20,8 @@ struct Quaternion
     double z{};
 };
 
-// Returns the rotation whose -Z axis is look_direction and whose +Y axis is up made orthogonal to look_direction.
+// Returns the rotation whose -Z axis points along look_direction and whose +Y axis points along the projection of up perpendicular to
+// look_direction.
 // Requires a nonzero look_direction and an up that is not parallel to it.
 [[nodiscard]] Quaternion quaternion_from_look_direction_and_up(lop::Point3 const& look_direction, lop::Point3 const& up);
 
@@ -46,8 +47,8 @@ public:
     [[nodiscard]] double duration_seconds() const noexcept { return samples_.back().time_seconds; }
 
     // Returns the pose at time_seconds: position and field of view by linear interpolation and orientation by spherical linear interpolation
-    // (slerp) between the two samples
-    // around time_seconds; the first sample for a negative time and the last one after duration_seconds.
+    // (slerp) between the two samples around time_seconds; the first sample's pose for negative time_seconds and the last sample's pose
+    // for time_seconds greater than or equal to duration_seconds.
     [[nodiscard]] lop::CameraPose pose_at(double time_seconds) const;
 
 private:
@@ -63,7 +64,7 @@ public:
     static constexpr double minimum_sample_interval_seconds = 1.0 / 60.0;
 
     // clock_seconds: monotonic clock in seconds (lop::ViewFrame::frame_time_seconds); the first call sets the origin of the times.
-    void append(double clock_seconds, lop::CameraPose const& pose);
+    void record_pose(double clock_seconds, lop::CameraPose const& pose);
 
     [[nodiscard]] std::size_t sample_count() const noexcept { return samples_.size(); }
     // Seconds between the first and the last kept sample; 0 without samples.

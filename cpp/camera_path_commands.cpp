@@ -81,7 +81,7 @@ namespace
 
         lop::Task<> on_start() override
         {
-            // The folder is read now because the command can finish before the path is written.
+            // Stores the extension data directory path during on_start for the automatic save in on_finish.
             automatic_save_directory_path_ = host().get_extension_data_directory_path();
             host().set_kept_below_new_commands(true);
             host().set_view_frame_notices(lop::ViewFrameNotices::every_frame);
@@ -93,7 +93,7 @@ namespace
         {
             if (stopped_)
                 return;
-            recorder_.append(frame.frame_time_seconds, frame.camera_pose);
+            recorder_.record_pose(frame.frame_time_seconds, frame.camera_pose);
             last_frame_ = frame;
             if (frame.frame_time_seconds - last_banner_time_seconds_ >= banner_refresh_interval_seconds)
             {
@@ -120,15 +120,15 @@ namespace
             }
             catch (std::exception const&)
             {
-                // The picker failed: on_finish writes the path in the data folder of the extension.
+                // If the picker fails, on_finish tries to save the recording in the extension data directory, because written_ is still false.
             }
             if (file_path && !file_path->empty())
                 write(*file_path);
             finish();
         }
 
-        // Esc, the ribbon button and the closing of the document finish the command without the save file picker; a failed write to the
-        // path of the picker also leaves the path unwritten, so this function writes it in the data folder.
+        // Esc, the ribbon button and the closing of the document finish the command without the save file picker. If writing the
+        // recording to the selected file fails, on_finish tries to save the recording to a file in the extension data directory.
         void on_finish() override
         {
             if (!stopped_)
@@ -146,7 +146,8 @@ namespace
                 { lop::BannerButton{ text(language_, TextId::stop_recording), "stop" } });
         }
 
-        // Stops recording samples and stores the resulting CameraPath in last_recorded_camera_path().
+        // Stops recording samples. If a frame was recorded, creates a CameraPath and assigns it to recorded_path_ and
+        // last_recorded_camera_path().
         void stop_recording()
         {
             stopped_ = true;
@@ -245,7 +246,7 @@ namespace
 
         void on_view_frame(lop::ViewFrame const& frame) override
         {
-            if (!playback_ || is_travelling_to_first_pose_)
+            if (!playback_ || is_animating_to_first_pose_)
                 return;
             // Another component moved the camera after the previous set_camera_pose of this command.
             if (previous_frame_time_seconds_ && !frame.camera_pose_set_by_this_command)
@@ -282,7 +283,7 @@ namespace
             else if (action == "open")
             {
                 // A second animate_camera call would cancel the pending animation, causing the suspended play call to invoke finish().
-                if (is_travelling_to_first_pose_)
+                if (is_animating_to_first_pose_)
                     co_return;
                 if (auto path = co_await open_file())
                     co_await play(std::move(*path));
@@ -340,16 +341,16 @@ namespace
         {
             playback_.emplace(std::move(path));
             previous_frame_time_seconds_.reset();
-            is_travelling_to_first_pose_ = true;
+            is_animating_to_first_pose_ = true;
             show_banner();
             host().set_view_frame_notices(lop::ViewFrameNotices::every_frame);
-            // animate_camera yields std::nullopt if another movement interrupts the travel or the command finishes.
+            // Awaiting animate_camera returns std::nullopt if another camera movement interrupts the animation or the command finishes.
             if (!co_await host().animate_camera(playback_->path().samples().front().pose))
             {
                 finish();
                 co_return;
             }
-            is_travelling_to_first_pose_ = false;
+            is_animating_to_first_pose_ = false;
         }
 
         // Asks for a .lopcamerapath file and reads it; logs the reason and returns std::nullopt for a file that cannot be read.
@@ -388,7 +389,7 @@ namespace
         std::optional<CameraPathPlayback> playback_;
         std::optional<double> previous_frame_time_seconds_;
         double last_banner_time_seconds_{};
-        bool is_travelling_to_first_pose_{};
+        bool is_animating_to_first_pose_{};
     };
 }
 

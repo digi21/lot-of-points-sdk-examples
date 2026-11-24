@@ -65,16 +65,16 @@ namespace
             "Registra la posizione, l'orientazione e il campo visivo verticale della telecamera durante la navigazione.",
             "Grava a posição, a orientação e o campo de visão vertical da câmara durante a navegação.",
             "Zeichnet Position, Ausrichtung und vertikales Sichtfeld der Kamera während der Navigation auf."),
-        translations("Reproduce el último recorrido grabado o un fichero .lopcamerapath; el banner tiene pausa, velocidad y repetición.",
-            "Plays the last recorded path or a .lopcamerapath file; the banner has pause, speed and loop.",
-            "Reprodueix l'últim recorregut enregistrat o un fitxer .lopcamerapath; el bàner té pausa, velocitat i repetició.",
-            "Reproduce o último percorrido gravado ou un ficheiro .lopcamerapath; o báner ten pausa, velocidade e repetición.",
-            "Grabatutako azken ibilbidea edo .lopcamerapath fitxategi bat erreproduzitzen du; bannerrak pausa, abiadura eta errepikapena ditu.",
-            "Lit le dernier parcours enregistré ou un fichier .lopcamerapath ; la bannière propose pause, vitesse et boucle.",
-            "Riproduce l'ultimo percorso registrato o un file .lopcamerapath; il banner ha pausa, velocità e ripetizione.",
-            "Reproduz o último percurso gravado ou um ficheiro .lopcamerapath; o banner tem pausa, velocidade e repetição.",
-            "Spielt den zuletzt aufgezeichneten Pfad oder eine .lopcamerapath-Datei ab; das Banner bietet Pause, Geschwindigkeit und "
-            "Wiederholung."),
+        translations("Reproduce el último recorrido grabado o un fichero .lopcamerapath; el banner permite pausar o reanudar la reproducción, cambiar la velocidad y activar o desactivar la repetición.",
+            "Plays the last recorded path or a .lopcamerapath file; the banner lets you pause or resume playback, change the speed and turn looping on or off.",
+            "Reprodueix l'últim recorregut enregistrat o un fitxer .lopcamerapath; el bàner permet pausar o reprendre la reproducció, canviar la velocitat i activar o desactivar la repetició.",
+            "Reproduce o último percorrido gravado ou un ficheiro .lopcamerapath; o báner permite pausar ou reanudar a reprodución, cambiar a velocidade e activar ou desactivar a repetición.",
+            "Grabatutako azken ibilbidea edo .lopcamerapath fitxategi bat erreproduzitzen du; bannerrak erreprodukzioa pausatzeko edo berriro hasteko, abiadura aldatzeko eta errepikapena aktibatzeko edo desaktibatzeko aukera ematen du.",
+            "Lit le dernier parcours enregistré ou un fichier .lopcamerapath ; la bannière permet de mettre en pause ou de reprendre la lecture, de changer la vitesse et d'activer ou de désactiver la répétition.",
+            "Riproduce l'ultimo percorso registrato o un file .lopcamerapath; il banner permette di mettere in pausa o riprendere la riproduzione, cambiare la velocità e attivare o disattivare la ripetizione.",
+            "Reproduz o último percurso gravado ou um ficheiro .lopcamerapath; o banner permite pausar ou retomar a reprodução, alterar a velocidade e ativar ou desativar a repetição.",
+            "Spielt den zuletzt aufgezeichneten Pfad oder eine .lopcamerapath-Datei ab; das Banner ermöglicht es, die Wiedergabe anzuhalten oder "
+            "fortzusetzen, die Geschwindigkeit zu ändern und die Wiederholung ein- oder auszuschalten."),
     };
 
     static_assert(camera_path_translations_by_text_id.size() == static_cast<std::size_t>(TextId::play_description) + 1);

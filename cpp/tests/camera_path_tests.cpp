@@ -78,7 +78,7 @@ namespace
             { 2.5, pose_from(-5.0, -20.0, 200.0, 60.0) } } };
     }
 
-    // 1. pose_at returns the exact sample at its time and the mean of positions and field of view at the midpoint.
+    // 1. pose_at returns each sample's exact pose at that sample's time_seconds and, halfway between two consecutive sample times, the mean of their positions and fields of view.
     void test_pose_at()
     {
         auto const path = sample_path();
@@ -129,19 +129,19 @@ namespace
 
         CameraPathRecorder equal_poses;
         for (int frame = 0; frame < 10; ++frame)
-            equal_poses.append(100.0 + 0.1 * frame, pose_a);
+            equal_poses.record_pose(100.0 + 0.1 * frame, pose_a);
         CHECK(2 == equal_poses.sample_count());
         auto const equal_path = equal_poses.to_camera_path(100.0 + 0.1 * 9, pose_a);
         CHECK(equal_path && 2 == equal_path->samples().size());
         CHECK(equal_path && equal_path->samples().front().time_seconds == 0.0);
         CHECK(equal_path && std::abs(equal_path->samples().back().time_seconds - 0.9) < 1e-12);
 
-        // A pause of 3 s between two movements is a pause of 3 s, not a slow movement.
+        // Checks that the pose at 1.5 s matches pose_a after recording repeated pose_a samples from 0 to 3 s.
         CameraPathRecorder pause;
-        pause.append(0.0, pose_a);
+        pause.record_pose(0.0, pose_a);
         for (int frame = 1; frame <= 180; ++frame)
-            pause.append(frame / 60.0, pose_a);
-        pause.append(3.1, pose_b);
+            pause.record_pose(frame / 60.0, pose_a);
+        pause.record_pose(3.1, pose_b);
         auto const pause_path = pause.to_camera_path(3.1, pose_b);
         CHECK(pause_path && 3 == pause_path->samples().size());
         CHECK(pause_path && distance(pause_path->pose_at(1.5).position, pose_a.position) < 1e-12);
@@ -151,15 +151,15 @@ namespace
         // 144 Hz frames with a different pose in each frame.
         CameraPathRecorder recorder_at_144_frames_per_second;
         for (int frame = 0; frame <= 144; ++frame)
-            recorder_at_144_frames_per_second.append(frame / 144.0, pose_from(frame, 0.0, 0.0, 45.0));
+            recorder_at_144_frames_per_second.record_pose(frame / 144.0, pose_from(frame, 0.0, 0.0, 45.0));
         CHECK(recorder_at_144_frames_per_second.sample_count() <= 61);
         CHECK(recorder_at_144_frames_per_second.sample_count() > 1);
 
         // The final pose is kept although it is less than 1/60 s after the last kept sample.
         CameraPathRecorder close_final;
-        close_final.append(100.0, pose_a);
-        close_final.append(100.5, pose_a);
-        close_final.append(101.0, pose_b);
+        close_final.record_pose(100.0, pose_a);
+        close_final.record_pose(100.5, pose_a);
+        close_final.record_pose(101.0, pose_b);
         auto const final_pose = pose_from(3.0, 0.0, 45.0, 45.0);
         auto const close_path = close_final.to_camera_path(101.005, final_pose);
         CHECK(close_path && 4 == close_path->samples().size());
@@ -169,7 +169,8 @@ namespace
         CHECK(!CameraPathRecorder{}.to_camera_path(1.0, pose_a));
     }
 
-    // 4. The playback advances with the speed, stops on pause, ends or loops past the duration, and ends at once for a duration of 0.
+    // 4. advance multiplies the elapsed time by speed_multiplier(), preserves path_time_seconds() while paused, wraps path_time_seconds() past
+    // the duration when loops is true, and returns std::nullopt past the duration when loops is false or when the duration is 0 s.
     void test_playback()
     {
         auto const path = CameraPath{ { { 0.0, pose_from(0.0, 0.0, 0.0, 45.0) }, { 2.0, pose_from(2.0, 0.0, 0.0, 45.0) } } };
@@ -221,7 +222,8 @@ namespace
             time_seconds_json, vertical_field_of_view_degrees_json);
     }
 
-    // 5. The JSON text reads back as the same samples, bit by bit, and the invalid texts are rejected.
+    // 5. camera_path_from_json(to_camera_path_json(path)) preserves every number of the samples of the tested path bit for bit; camera_path_from_json throws
+    // std::invalid_argument for the invalid texts tested below, and the CameraPath constructor throws it for the invalid values tested after them.
     void test_json()
     {
         CameraPath const path{ { { 0.0, { { 0.1, -0.0, 443210.123456789 }, { 1.0 / 3.0, 2.0 / 3.0, -1e-300 }, { 0.0, 1.0, 0.0 }, 45.000000000001 } },

@@ -195,7 +195,7 @@ lop::CameraPose CameraPath::pose_at(double const time_seconds) const
         lerp(before.pose.vertical_field_of_view_degrees, after.pose.vertical_field_of_view_degrees) };
 }
 
-void CameraPathRecorder::append(double const clock_seconds, lop::CameraPose const& pose)
+void CameraPathRecorder::record_pose(double const clock_seconds, lop::CameraPose const& pose)
 {
     if (!start_clock_seconds_)
         start_clock_seconds_ = clock_seconds;
