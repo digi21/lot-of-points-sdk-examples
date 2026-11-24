@@ -399,7 +399,7 @@ std::vector<lop::Declaration> declare_camera_path_commands(lop::Language const l
         lop::declare<RecordCameraPathCommand>({
             .id = record_command_id,
             .name = text(language, TextId::record_name),
-            .existing_tab_id = "lop.tab.view",
+            .new_tab_title = text(language, TextId::utilities_tab),
             .ribbon_section = text(language, TextId::utilities_section),
             .description = text(language, TextId::record_description),
             .icon_png = { std::begin(record_camera_path_icon), std::end(record_camera_path_icon) },
@@ -408,7 +408,7 @@ std::vector<lop::Declaration> declare_camera_path_commands(lop::Language const l
         lop::declare<PlayCameraPathCommand>({
             .id = play_command_id,
             .name = text(language, TextId::play_name),
-            .existing_tab_id = "lop.tab.view",
+            .new_tab_title = text(language, TextId::utilities_tab),
             .ribbon_section = text(language, TextId::utilities_section),
             .description = text(language, TextId::play_description),
             .icon_png = { std::begin(play_camera_path_icon), std::end(play_camera_path_icon) },

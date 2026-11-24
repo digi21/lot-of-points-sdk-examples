@@ -16,6 +16,7 @@ namespace
     // One entry per TextId, in the order of the enumeration.
     constexpr std::array camera_path_translations_by_text_id{
         translations("Utilidades", "Utilities", "Utilitats", "Utilidades", "Utilitateak", "Utilitaires", "Utilità", "Utilitários", "Dienstprogramme"),
+        translations("Utilidades", "Utilities", "Utilitats", "Utilidades", "Utilitateak", "Utilitaires", "Utilità", "Utilitários", "Dienstprogramme"),
         translations("Grabar recorrido de la cámara", "Record camera path", "Enregistrar recorregut de la càmera", "Gravar percorrido da cámara",
             "Kameraren ibilbidea grabatu", "Enregistrer le parcours de la caméra", "Registra percorso della telecamera",
             "Gravar percurso da câmara", "Kamerapfad aufzeichnen"),

@@ -128,7 +128,7 @@ std::vector<lop::Declaration> declare_points_panel_commands(bool const spanish)
         lop::declare<ShowPointsPanelCommand>({
             .id = "lop.example.show_points_panel",
             .name = spanish ? "Puntos alrededor" : "Points around",
-            .existing_tab_id = "lop.tab.view",
+            .existing_tab_id = "lop.tab.edit",
             .ribbon_section = section,
             .description = spanish ? "Muestra el panel que cuenta los puntos alrededor de los puntos que pulses."
                                    : "Shows the panel that counts the points around the points you click.",

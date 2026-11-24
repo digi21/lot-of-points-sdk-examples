@@ -24,7 +24,7 @@ def describe(p, class_name):
 
 @lop.command("lop.example.python.point_data",
              "Datos del punto (Python)" if SPANISH else "Point data (Python)",
-             existing_tab_id="lop.tab.view",
+             existing_tab_id="lop.tab.edit",
              ribbon_section="Ejemplos en Python" if SPANISH else "Python examples",
              description="Escribe en el panel de resultados las coordenadas y los atributos de los puntos que pulses." if SPANISH
              else "Writes in the Output panel the coordinates and the attributes of the points you click.",

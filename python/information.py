@@ -198,7 +198,7 @@ def log_cloud_statistics(task, cell_side_length, spanish):
 
 @lop.command("lop.example.python.information",
              "Información (Python)" if SPANISH else "Information (Python)",
-             existing_tab_id="lop.tab.view",
+             new_tab_title="Utilidades" if SPANISH else "Utilities",
              ribbon_section="Ejemplos en Python" if SPANISH else "Python examples",
              description="Escribe en el panel de salida los recuentos de puntos por clase y estadísticas de cada nube abierta." if SPANISH
              else "Writes to the Output panel the point counts by class and statistics of each open cloud.",

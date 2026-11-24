@@ -48,7 +48,7 @@ lop::Declaration declare_point_data(bool const spanish)
     return lop::declare<PointData>({
         .id = "lop.example.point_data",
         .name = spanish ? "Datos del punto" : "Point data",
-        .existing_tab_id = "lop.tab.view",
+        .existing_tab_id = "lop.tab.edit",
         .ribbon_section = spanish ? "Utilidades" : "Utilities",
         .description = spanish ? "Escribe en el panel de resultados las coordenadas y los atributos de los puntos que pulses."
                                : "Writes in the Output panel the coordinates and the attributes of the points you click.",

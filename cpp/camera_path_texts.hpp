@@ -6,6 +6,7 @@
 enum class TextId
 {
     utilities_section,
+    utilities_tab,
     record_name,
     play_name,
     stop_recording,

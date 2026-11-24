@@ -28,7 +28,7 @@ def get_ui_radius(host, panel_or_dialog_id):
 
 @lop.command("lop.example.python.show_points_panel",
              "Puntos alrededor (Python)" if SPANISH else "Points around (Python)",
-             existing_tab_id="lop.tab.view",
+             existing_tab_id="lop.tab.edit",
              ribbon_section=SECTION,
              description="Muestra el panel que cuenta los puntos alrededor de los puntos que pulses." if SPANISH
              else "Shows the panel that counts the points around the points you click.",

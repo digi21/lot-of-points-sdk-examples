@@ -308,7 +308,7 @@ lop::Declaration declare_information(bool const spanish)
     return lop::declare<LogCloudStatisticsCommand>({
         .id = "lop.example.information",
         .name = spanish ? "Información" : "Information",
-        .existing_tab_id = "lop.tab.view",
+        .new_tab_title = spanish ? "Utilidades" : "Utilities",
         .ribbon_section = spanish ? "Utilidades" : "Utilities",
         .description = spanish ? "Escribe en el panel de salida los recuentos de puntos por clase y estadísticas de cada nube abierta."
                                : "Writes to the Output panel the point counts by class and statistics of each open cloud.",

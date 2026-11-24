@@ -20,10 +20,15 @@ namespace
             extension.commands.push_back(std::move(declaration));
         for (auto& declaration : declare_camera_path_commands(language))
             extension.commands.push_back(std::move(declaration));
-        // The commands in the same ribbon section must have the same name in every language, or lop shows one section per name.
+        // The commands in the same ribbon section or the same new tab must have the same name in every language, or lop shows one section or
+        // one tab per name.
         for (auto& declaration : extension.commands)
-            if (!declaration.existing_tab_id.empty())
+        {
+            if (!declaration.existing_tab_id.empty() || !declaration.new_tab_title.empty())
                 declaration.ribbon_section = text(language, TextId::utilities_section);
+            if (!declaration.new_tab_title.empty())
+                declaration.new_tab_title = text(language, TextId::utilities_tab);
+        }
         extension.panels.push_back(declare_points_panel(spanish));
         extension.dialogs.push_back(declare_points_panel_options_dialog(spanish));
         return extension;

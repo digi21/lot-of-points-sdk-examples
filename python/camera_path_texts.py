@@ -20,6 +20,17 @@ CAMERA_PATH_TRANSLATIONS_BY_TEXT_ID = {
         "Utilitários",
         "Dienstprogramme",
     ),
+    "utilities_tab": (
+        "Utilidades",
+        "Utilities",
+        "Utilitats",
+        "Utilidades",
+        "Utilitateak",
+        "Utilitaires",
+        "Utilità",
+        "Utilitários",
+        "Dienstprogramme",
+    ),
     "record_name": (
         "Grabar recorrido de la cámara",
         "Record camera path",

@@ -51,7 +51,7 @@ def suggested_file_name():
 
 
 @lop.command("lop.example.python.record_camera_path", TEXTS["record_name"] + " (Python)",
-             existing_tab_id="lop.tab.view",
+             new_tab_title=TEXTS["utilities_tab"],
              ribbon_section="Ejemplos en Python" if lop.language == "es" else "Python examples",
              description=TEXTS["record_description"],
              icon="record_camera_path.png",
@@ -146,7 +146,7 @@ class RecordCameraPathCommand(lop.Command):
 
 
 @lop.command("lop.example.python.play_camera_path", TEXTS["play_name"] + " (Python)",
-             existing_tab_id="lop.tab.view",
+             new_tab_title=TEXTS["utilities_tab"],
              ribbon_section="Ejemplos en Python" if lop.language == "es" else "Python examples",
              description=TEXTS["play_description"],
              icon="play_camera_path.png",
