@@ -12,6 +12,9 @@
 [[nodiscard]] lop::Declaration declare_point_data(bool spanish);
 [[nodiscard]] lop::Declaration declare_select_object(bool spanish);
 
+// Declares Record camera path and Play camera path with the texts of language (see camera_path_texts.hpp).
+[[nodiscard]] std::vector<lop::Declaration> declare_camera_path_commands(lop::Language language);
+
 // Declares the command that shows the Points around panel and the two commands without ribbon button that the panel launches.
 [[nodiscard]] std::vector<lop::Declaration> declare_points_panel_commands(bool spanish);
 [[nodiscard]] lop::Panel declare_points_panel(bool spanish);
