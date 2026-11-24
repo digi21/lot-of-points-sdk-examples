@@ -1,6 +1,6 @@
 ﻿// Header-only C++20 API over lop_sdk.h. A command derives from lop::Command: lop calls its event functions on the user interface thread,
-// on_start, on_panel_action and on_panel_value_changed are coroutines that can co_await requests (a point, the points of a sphere, the open
-// clouds, a file), and run_in_background runs a computation on a thread of lop as a task of the Background tasks panel. Pass a function
+// on_start, on_panel_action, on_panel_value_changed and on_banner_action are coroutines that can co_await requests (a point, the points of a
+// sphere, the open clouds, a file, a camera animation), and run_in_background runs a computation on a thread of lop as a task of the Background tasks panel. Pass a function
 // returning lop::Extension (or only the commands, as std::vector<lop::Declaration>) to LOP_SDK_EXTENSION, which exports lop_register_extension.
 #pragma once
 
@@ -115,7 +115,7 @@ namespace lop
         Points() = default;
         Points(Points&& other) noexcept
             : _release{ std::exchange(other._release, nullptr) }, _context{ std::exchange(other._context, nullptr) },
-              _points{ std::exchange(other._points, {}) }
+              _points{ std::exchange(other._points, {}) }, _classification_flags{ std::exchange(other._classification_flags, nullptr) }
         {
         }
         Points& operator=(Points&& other) noexcept
@@ -126,6 +126,7 @@ namespace lop
                 _release = std::exchange(other._release, nullptr);
                 _context = std::exchange(other._context, nullptr);
                 _points = std::exchange(other._points, {});
+                _classification_flags = std::exchange(other._classification_flags, nullptr);
             }
             return *this;
         }
@@ -150,20 +151,24 @@ namespace lop
         [[nodiscard]] std::span<std::uint8_t const> red() const noexcept { return column(_points.red); }
         [[nodiscard]] std::span<std::uint8_t const> green() const noexcept { return column(_points.green); }
         [[nodiscard]] std::span<std::uint8_t const> blue() const noexcept { return column(_points.blue); }
+        // Bits 0-3 as LOP_CLASSIFICATION_FLAG_*; empty if no cloud of the points has LOP_FIELD_CLASSIFICATION_FLAGS.
+        [[nodiscard]] std::span<std::uint8_t const> classification_flags() const noexcept { return column(_classification_flags); }
 
         [[nodiscard]] Point operator[](std::size_t const i) const noexcept
         {
             return { _points.x[i], _points.y[i], _points.z[i], _points.original_point_index[i], _points.cloud_id[i], _points.intensity[i],
                 _points.classification[i], _points.return_number[i], _points.number_of_returns[i], _points.red[i], _points.green[i],
-                _points.blue[i] };
+                _points.blue[i], _classification_flags ? _classification_flags[i] : std::uint8_t{} };
         }
 
         // Returns the C structure for select_points; the columns remain owned by this object.
         [[nodiscard]] lop_points const& c_points() const noexcept { return _points; }
 
-        // Takes the points delivered by lop; release is the release_points function of the host that delivered them.
-        Points(void (*release)(void*, lop_points*), void* const context, lop_points const& points) noexcept
-            : _release{ release }, _context{ context }, _points{ points }
+        // Assumes responsibility for releasing the point data delivered by lop; release is the release_points function of the host that delivered them, and
+        // classification_flags the column of get_points_classification_flags of that host, or nullptr.
+        Points(void (*release)(void*, lop_points*), void* const context, lop_points const& points,
+            std::uint8_t const* const classification_flags = nullptr) noexcept
+            : _release{ release }, _context{ context }, _points{ points }, _classification_flags{ classification_flags }
         {
         }
 
@@ -181,11 +186,13 @@ namespace lop
             _release = nullptr;
             _context = nullptr;
             _points = {};
+            _classification_flags = nullptr;
         }
 
         void (*_release)(void*, lop_points*) {};
         void* _context{};
         lop_points _points{};
+        std::uint8_t const* _classification_flags{};
     };
 
     // Copies cloud metadata and strings.
@@ -238,6 +245,40 @@ namespace lop
         std::uint32_t color_argb{};
         double cross_arm_length_or_text_line_height_pixels{};
         std::string text;
+    };
+
+    // SDK 0.8. A camera pose in world coordinates, in cloud units, with the world Z axis up (see lop_camera_pose).
+    struct CameraPose
+    {
+        Point3 position{};
+        Point3 look_direction{ 0.0, 0.0, -1.0 };
+        Point3 up{ 0.0, 1.0, 0.0 };
+        double vertical_field_of_view_degrees{ 45.0 };
+    };
+
+    // SDK 0.8. Modes of Host::set_view_frame_notices (see LOP_VIEW_FRAME_NOTICES_*).
+    enum class ViewFrameNotices : std::uint32_t
+    {
+        none = LOP_VIEW_FRAME_NOTICES_NONE,
+        when_camera_changes = LOP_VIEW_FRAME_NOTICES_WHEN_CAMERA_CHANGES,
+        every_frame = LOP_VIEW_FRAME_NOTICES_EVERY_FRAME,
+    };
+
+    // SDK 0.8. The fields of a LOP_EVENT_VIEW_FRAME.
+    struct ViewFrame
+    {
+        CameraPose camera_pose;
+        double frame_time_seconds{};                // Reading in seconds of a monotonic clock of lop, with an arbitrary origin.
+        bool camera_changed{};
+        bool camera_pose_set_by_this_command{};
+    };
+
+    // SDK 0.8. A button of Host::show_banner: text in the language of the extension, and the action_name that Command::on_banner_action
+    // receives, in ASCII letters, digits, '.', '_' and '-'.
+    struct BannerButton
+    {
+        std::string text;
+        std::string action_name;
     };
 
     // Filters the points near a click in ask_cloud_point; true accepts the point.
@@ -355,7 +396,7 @@ namespace lop
     // A row of Lists[key] of a panel or dialog: the name of each field and its double, std::int32_t, bool or std::string value.
     using UiRow = std::vector<std::pair<std::string, UiValue>>;
 
-    // set_ui_value, get_ui_value, set_ui_rows and show_panel throw UiFailed on LOP_FAILED; the Output panel contains the reason when the host throws an exception.
+    // set_ui_value, get_ui_value, set_ui_rows, show_panel and mark_panel_for_attention throw UiFailed on LOP_FAILED; the Output panel contains the reason when the host throws an exception.
     class UiFailed : public std::runtime_error
     {
     public:
@@ -542,6 +583,64 @@ namespace lop
                 });
         }
 
+        // Accepts the poses of lop_command_host::set_camera_pose: finite values, a look_direction of length 1e-9 or more, an up whose
+        // component orthogonal to look_direction is not zero and is at least 1e-9 times the length of up, and a field of view greater than 0
+        // and less than 180 degrees. Divides each vector by its largest absolute component so that the products do not overflow.
+        [[nodiscard]] inline bool valid_camera_pose(CameraPose const& pose) noexcept
+        {
+            auto const finite = [](Point3 const& vector) { return std::isfinite(vector.x) && std::isfinite(vector.y) && std::isfinite(vector.z); };
+            if (!finite(pose.position) || !finite(pose.look_direction) || !finite(pose.up)
+                || !(pose.vertical_field_of_view_degrees > 0.0 && pose.vertical_field_of_view_degrees < 180.0)
+                || std::hypot(pose.look_direction.x, pose.look_direction.y, pose.look_direction.z) < 1e-9
+                || (0.0 == pose.up.x && 0.0 == pose.up.y && 0.0 == pose.up.z))
+                return false;
+            auto const divide_by_largest_absolute_component = [](Point3 const& vector)
+                {
+                    auto const largest_absolute_component = std::max({ std::abs(vector.x), std::abs(vector.y), std::abs(vector.z) });
+                    return Point3{ vector.x / largest_absolute_component, vector.y / largest_absolute_component, vector.z / largest_absolute_component };
+                };
+            auto look = divide_by_largest_absolute_component(pose.look_direction);
+            auto const look_length = std::hypot(look.x, look.y, look.z);
+            look = { look.x / look_length, look.y / look_length, look.z / look_length };
+            auto const up = divide_by_largest_absolute_component(pose.up);
+            auto const up_along_look = up.x * look.x + up.y * look.y + up.z * look.z;
+            auto const orthogonal_up_length = std::hypot(up.x - up_along_look * look.x, up.y - up_along_look * look.y, up.z - up_along_look * look.z);
+            return orthogonal_up_length >= 1e-9 * std::hypot(up.x, up.y, up.z);
+        }
+
+        [[nodiscard]] inline lop_camera_pose to_c_camera_pose(CameraPose const& pose) noexcept
+        {
+            return { { pose.position.x, pose.position.y, pose.position.z }, { pose.look_direction.x, pose.look_direction.y, pose.look_direction.z },
+                { pose.up.x, pose.up.y, pose.up.z }, pose.vertical_field_of_view_degrees };
+        }
+
+        [[nodiscard]] inline CameraPose from_c_camera_pose(lop_camera_pose const& pose) noexcept
+        {
+            return { { pose.position[0], pose.position[1], pose.position[2] }, { pose.look_direction[0], pose.look_direction[1], pose.look_direction[2] },
+                { pose.up[0], pose.up[1], pose.up[2] }, pose.vertical_field_of_view_degrees };
+        }
+
+        // Accepts the arguments of lop_command_host::show_banner: a message of at most LOP_MAX_BANNER_MESSAGE_BYTES bytes, a progress that is
+        // not NaN and not greater than 1, at most LOP_MAX_BANNER_BUTTONS buttons, button texts that are not empty and have at most
+        // LOP_MAX_BANNER_BUTTON_TEXT_BYTES bytes, action names of ASCII letters, digits, '.', '_' and '-' that are not empty, and no null
+        // characters in the message or the texts.
+        [[nodiscard]] inline bool valid_banner(std::string_view const message, double const progress, std::span<BannerButton const> const buttons) noexcept
+        {
+            if (message.size() > LOP_MAX_BANNER_MESSAGE_BYTES || std::string_view::npos != message.find('\0') || std::isnan(progress)
+                || progress > 1.0 || buttons.size() > LOP_MAX_BANNER_BUTTONS)
+                return false;
+            return std::ranges::all_of(buttons, [](BannerButton const& button)
+                {
+                    return !button.text.empty() && button.text.size() <= LOP_MAX_BANNER_BUTTON_TEXT_BYTES
+                        && std::string::npos == button.text.find('\0') && !button.action_name.empty()
+                        && std::ranges::all_of(button.action_name, [](char const character)
+                            {
+                                return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z')
+                                    || (character >= '0' && character <= '9') || '.' == character || '_' == character || '-' == character;
+                            });
+                });
+        }
+
         // Converts a double, std::int32_t, bool or std::string value; text points to the string of value. Throws std::invalid_argument for
         // std::monostate and OtherUiValue.
         [[nodiscard]] inline lop_ui_value to_c_ui_value(UiValue const& value)
@@ -725,7 +824,12 @@ namespace lop
                 static_cast<std::uint32_t>(cloud_ids.size()), &points))
             {
             case LOP_OK:
-                return Points{ _host.release_points, _host.context, points };
+            {
+                std::uint8_t const* classification_flags{};
+                if (LOP_OK != _host.get_points_classification_flags(_host.context, &points, &classification_flags))
+                    classification_flags = nullptr;
+                return Points{ _host.release_points, _host.context, points, classification_flags };
+            }
             case LOP_CANCELLED:
                 _cancellation_reported = true;
                 return std::nullopt;
@@ -859,6 +963,16 @@ namespace lop
         {
             if (LOP_OK != detail::call_set_ui_rows(_host.set_ui_rows, _host.context, std::string{ panel_or_dialog_id }, std::string{ list_key }, rows))
                 throw UiFailed{ "set_ui_rows returned LOP_FAILED" };
+        }
+
+        // Marks the tab of the panel panel_id, declared by this extension, so that the user sees that the panel has new content, without
+        // opening or activating the panel (see lop_task_host::mark_panel_for_attention). Does nothing visible if the panel is closed or its
+        // content is on screen. Throws UiFailed on LOP_FAILED.
+        void mark_panel_for_attention(std::string_view const panel_id) const
+        {
+            std::string const id{ panel_id };
+            if (LOP_OK != _host.mark_panel_for_attention(_host.context, id.c_str()))
+                throw UiFailed{ "mark_panel_for_attention returned LOP_FAILED" };
         }
 
         // Returns the folder, in UTF-8, where this extension keeps the files that do not belong to a cloud, after lop creates it; std::nullopt
@@ -1069,7 +1183,7 @@ namespace lop
     }
 
     // A coroutine that runs on the user interface thread: it starts when another coroutine awaits it, or when lop starts on_start or a panel
-    // event handler of lop::Command, and resumes when lop completes the requests it awaits. Destroying the Task destroys the coroutine and unregisters its awaiters; the host requests remain pending until lop completes them.
+    // or banner event handler of lop::Command, and resumes when lop completes the requests it awaits. Destroying the Task destroys the coroutine and unregisters its awaiters; the host requests remain pending until lop completes them.
     template<typename T>
     class Task
     {
@@ -1424,7 +1538,13 @@ namespace lop
                     double const xyz[]{ center.x, center.y, center.z };
                     return _host.request_points_in_sphere(_host.context, xyz, radius, ids->empty() ? nullptr : ids->data(), static_cast<std::uint32_t>(ids->size()));
                 },
-                [this](lop_event const& event) { return Points{ _host.release_points, _host.context, event.points }; } };
+                [this](lop_event const& event)
+                {
+                    std::uint8_t const* classification_flags{};
+                    if (LOP_OK != _host.get_points_classification_flags(_host.context, &event.points, &classification_flags))
+                        classification_flags = nullptr;
+                    return Points{ _host.release_points, _host.context, event.points, classification_flags };
+                } };
         }
 
         [[nodiscard]] detail::RequestAwaiter<Points> points_in_sphere(Point const& center, double const radius, std::span<std::uint32_t const> const cloud_ids = {}) const
@@ -1468,6 +1588,16 @@ namespace lop
         {
             std::string const id{ command_id };
             return LOP_OK == _host.run_command(_host.context, id.c_str());
+        }
+
+        // Marks the tab of the panel panel_id, declared by this extension, so that the user sees that the panel has new content, without
+        // opening or activating the panel (see lop_command_host::mark_panel_for_attention). Does nothing visible if the panel is closed or its
+        // content is on screen. Throws UiFailed on LOP_FAILED.
+        void mark_panel_for_attention(std::string_view const panel_id) const
+        {
+            std::string const id{ panel_id };
+            if (LOP_OK != _host.mark_panel_for_attention(_host.context, id.c_str()))
+                throw UiFailed{ "mark_panel_for_attention returned LOP_FAILED" };
         }
 
         // Assigns a double, std::int32_t, bool or std::string value to Values[key] of the panel or dialog; while the dialog is open, to the copy
@@ -1686,6 +1816,89 @@ namespace lop
         // start in the same on_event call. Returns true if a request was pending.
         bool cancel_point_or_geometry_request() const { return 0 != _host.cancel_point_or_geometry_request(_host.context); }
 
+        // SDK 0.8. Returns the pose that lop last sent to the viewer, with the current vertical field of view, or std::nullopt when no
+        // document is open.
+        [[nodiscard]] std::optional<CameraPose> get_camera_pose() const
+        {
+            lop_camera_pose pose{};
+            if (LOP_OK != _host.get_camera_pose(_host.context, &pose))
+                return std::nullopt;
+            return detail::from_c_camera_pose(pose);
+        }
+
+        // SDK 0.8. Places the camera at pose without animation (see lop_command_host::set_camera_pose). Returns false if lop rejects the call
+        // because no document is open or the command has finished. Throws std::invalid_argument, without calling lop, for a nonfinite value,
+        // a look_direction shorter than 1e-9, an up whose component orthogonal to look_direction is zero or shorter than 1e-9 times the length
+        // of up, or a field of view outside (0, 180) degrees.
+        bool set_camera_pose(CameraPose const& pose) const
+        {
+            if (!detail::valid_camera_pose(pose))
+                throw std::invalid_argument{ "set_camera_pose: the values must be finite, look_direction at least 1e-9 long, up with a nonzero "
+                    "component orthogonal to look_direction of at least 1e-9 times the length of up, and the field of view greater than 0 and "
+                    "less than 180 degrees" };
+            auto const converted = detail::to_c_camera_pose(pose);
+            return LOP_OK == _host.set_camera_pose(_host.context, &converted);
+        }
+
+        // SDK 0.8. Returns a request awaiter. Awaiting it animates the camera to pose and yields true when the camera has pose, or std::nullopt
+        // if another movement interrupts the animation or the command finishes first. Throws std::invalid_argument like set_camera_pose.
+        [[nodiscard]] detail::RequestAwaiter<bool> animate_camera(CameraPose const& pose) const
+        {
+            if (!detail::valid_camera_pose(pose))
+                throw std::invalid_argument{ "animate_camera: the values must be finite, look_direction at least 1e-9 long, up with a nonzero "
+                    "component orthogonal to look_direction of at least 1e-9 times the length of up, and the field of view greater than 0 and "
+                    "less than 180 degrees" };
+            auto const converted = detail::to_c_camera_pose(pose);
+            return { _instance, [this, converted] { return _host.request_camera_animation(_host.context, &converted); },
+                [](lop_event const&) { return true; } };
+        }
+
+        // SDK 0.8. Assigns the mode of Command::on_view_frame; ViewFrameNotices::none stops the notices. Throws std::runtime_error if lop
+        // rejects the call, for example after finish.
+        void set_view_frame_notices(ViewFrameNotices const mode) const
+        {
+            if (LOP_OK != _host.set_view_frame_notices(_host.context, static_cast<std::uint32_t>(mode)))
+                throw std::runtime_error{ "set_view_frame_notices returned LOP_FAILED" };
+        }
+
+        // SDK 0.8. Shows the banner of this command (see lop_command_host::show_banner); std::nullopt as progress shows no bar, and a press of a
+        // button calls Command::on_banner_action with its action_name. Throws std::invalid_argument, without calling lop, for the values that
+        // lop_command_host::show_banner rejects and for null characters in the texts, and UiFailed if lop returns LOP_FAILED, for example after finish.
+        void show_banner(std::string_view const message, std::optional<double> const progress, std::span<BannerButton const> const buttons) const
+        {
+            auto const progress_for_host = progress.value_or(-1.0);
+            if (!detail::valid_banner(message, progress_for_host, buttons))
+                throw std::invalid_argument{ "show_banner: the message has more than LOP_MAX_BANNER_MESSAGE_BYTES bytes, the progress is NaN or "
+                    "greater than 1, there are more than LOP_MAX_BANNER_BUTTONS buttons, a button text is empty or has more than "
+                    "LOP_MAX_BANNER_BUTTON_TEXT_BYTES bytes, an action name is empty or has characters other than ASCII letters, digits, '.', '_' "
+                    "and '-', or a text has null characters" };
+            std::string const text{ message };
+            std::vector<lop_banner_button> command_host_buttons;
+            command_host_buttons.reserve(buttons.size());
+            for (auto const& button : buttons)
+                command_host_buttons.push_back({ button.text.c_str(), button.action_name.c_str() });
+            if (LOP_OK != _host.show_banner(_host.context, text.c_str(), progress_for_host,
+                command_host_buttons.empty() ? nullptr : command_host_buttons.data(), static_cast<std::uint32_t>(command_host_buttons.size())))
+                throw UiFailed{ "show_banner returned LOP_FAILED" };
+        }
+
+        void show_banner(std::string_view const message, std::optional<double> const progress, std::initializer_list<BannerButton> const buttons) const
+        {
+            show_banner(message, progress, std::span<BannerButton const>{ buttons.begin(), buttons.size() });
+        }
+
+        // SDK 0.8. Removes the visible banner of this command and discards any banner content stored for this command.
+        void hide_banner() const { _host.hide_banner(_host.context); }
+
+        // SDK 0.8. With kept == true, a command launched with cancellation of previous commands leaves this command in the command stack, below
+        // the new command. With kept == false (the initial value), such a launch finishes this command unless it owns its panel (see
+        // lop_command_host::set_kept_below_new_commands). Throws std::runtime_error after finish.
+        void set_kept_below_new_commands(bool const kept) const
+        {
+            if (LOP_OK != _host.set_kept_below_new_commands(_host.context, kept ? 1 : 0))
+                throw std::runtime_error{ "set_kept_below_new_commands returned LOP_FAILED" };
+        }
+
     private:
         detail::Instance& _instance;
         lop_command_host const& _host;
@@ -1694,7 +1907,7 @@ namespace lop
     // Provides the functions of a cloud notice until the notice function returns; every function requires the user interface thread.
     // After Extension::on_cloud_event returns, a kept copy behaves as follows: log does nothing, run_in_background throws std::runtime_error,
     // get_cloud_extension_data_directory_path, get_extension_data_directory_path and find_cloud_extension_data_directory_path return
-    // std::nullopt, load_geopackage and close_geopackage return false, and set_ui_value and set_ui_rows throw UiFailed.
+    // std::nullopt, load_geopackage and close_geopackage return false, and set_ui_value, set_ui_rows and mark_panel_for_attention throw UiFailed.
     class ExtensionHost
     {
     public:
@@ -1782,6 +1995,14 @@ namespace lop
                 throw UiFailed{ "set_ui_rows returned LOP_FAILED" };
         }
 
+        // Marks the tab of the panel panel_id, declared by this extension (see Host::mark_panel_for_attention); throws UiFailed on LOP_FAILED.
+        void mark_panel_for_attention(std::string_view const panel_id) const
+        {
+            std::string const id{ panel_id };
+            if (LOP_OK != _host.mark_panel_for_attention(_host.context, id.c_str()))
+                throw UiFailed{ "mark_panel_for_attention returned LOP_FAILED" };
+        }
+
     private:
         lop_extension_host _host;
     };
@@ -1813,6 +2034,12 @@ namespace lop
         // requests while lop delivers other events; uncaught exceptions are logged in the Output panel and shown in the status bar without
         // finishing the command.
         virtual Task<> on_panel_value_changed(std::string /*panel_id*/, std::string /*key*/, UiValue /*value*/) { co_return; }
+        // SDK 0.8. Called for each LOP_EVENT_VIEW_FRAME (see Host::set_view_frame_notices). An uncaught exception is logged and finishes the
+        // command, like the other event handlers that are not coroutines.
+        virtual void on_view_frame(ViewFrame const& /*frame*/) {}
+        // SDK 0.8. Called when the user presses a button of the banner of this command (see Host::show_banner); a coroutine like
+        // on_panel_action. An uncaught exception is logged in the Output panel and shown in the status bar; the command keeps running.
+        virtual Task<> on_banner_action(std::string /*action*/) { co_return; }
         // The last event: lop has removed the command from its stack and has completed its pending requests as cancelled.
         virtual void on_finish() {}
 
@@ -1916,9 +2143,9 @@ namespace lop
 
             Host wrapper;
             std::unique_ptr<Command> object;
-            // Stores the coroutines returned by on_panel_action and on_panel_value_changed until remove_finished_panel_event_tasks removes
-            // completed coroutines or destroy clears the list.
-            std::list<Task<>> panel_event_tasks;
+            // Stores the coroutines returned by on_panel_action, on_panel_value_changed and on_banner_action until remove_finished_event_tasks
+            // removes completed coroutines or destroy clears the list.
+            std::list<Task<>> event_tasks;
 
             void adopt(std::unique_ptr<Command> command_to_adopt)
             {
@@ -1955,18 +2182,18 @@ namespace lop
             }
 
             // Starts the coroutine and removes it at once if it finishes without suspending.
-            void start_panel_event_task(Task<> task)
+            void start_event_task(Task<> task)
             {
-                auto& panel_event_task = panel_event_tasks.emplace_back(std::move(task));
-                if (panel_event_task._handle)
-                    panel_event_task._handle.resume();
-                remove_finished_panel_event_tasks();
+                auto& event_task = event_tasks.emplace_back(std::move(task));
+                if (event_task._handle)
+                    event_task._handle.resume();
+                remove_finished_event_tasks();
             }
 
             // Logs the exception of each finished coroutine in the Output panel and the status bar; the command keeps running.
-            void remove_finished_panel_event_tasks() noexcept
+            void remove_finished_event_tasks() noexcept
             {
-                for (auto task = panel_event_tasks.begin(); task != panel_event_tasks.end();)
+                for (auto task = event_tasks.begin(); task != event_tasks.end();)
                 {
                     if (task->_handle && !task->_handle.done())
                     {
@@ -1975,8 +2202,8 @@ namespace lop
                     }
                     if (task->_handle)
                         if (auto const exception = task->_handle.promise().exception)
-                            log_and_show_status(exception, "a panel event handler");
-                    task = panel_event_tasks.erase(task);
+                            log_and_show_status(exception, "a panel or banner event handler");
+                    task = event_tasks.erase(task);
                 }
             }
 
@@ -2042,7 +2269,7 @@ namespace lop
                         pending.erase(request);
                         awaiter->complete(event);
                         handle_on_start_completion();
-                        remove_finished_panel_event_tasks();
+                        remove_finished_event_tasks();
                     }
                     else if (LOP_REQUEST_POINTS_IN_SPHERE == event.request_type && LOP_OK == event.result)
                     {
@@ -2058,14 +2285,27 @@ namespace lop
                 case LOP_EVENT_PANEL_ACTION:
                     if (event.size_bytes < offsetof(lop_event, panel_action_name) + sizeof(event.panel_action_name))
                         return 0;
-                    start_panel_event_task(object->on_panel_action(event.panel_id ? event.panel_id : "",
+                    start_event_task(object->on_panel_action(event.panel_id ? event.panel_id : "",
                         event.panel_action_name ? event.panel_action_name : ""));
                     return 1;
                 case LOP_EVENT_PANEL_VALUE_CHANGED:
                     if (event.size_bytes < offsetof(lop_event, panel_value) + sizeof(event.panel_value))
                         return 0;
-                    start_panel_event_task(object->on_panel_value_changed(event.panel_id ? event.panel_id : "",
+                    start_event_task(object->on_panel_value_changed(event.panel_id ? event.panel_id : "",
                         event.panel_value_key ? event.panel_value_key : "", from_c_ui_value(event.panel_value)));
+                    return 1;
+                // A lop that delivers a lop_event without the fields of the SDK 0.8 does not deliver these types; the check protects the reads.
+                case LOP_EVENT_VIEW_FRAME:
+                    if (event.size_bytes < offsetof(lop_event, camera_pose_set_by_this_command) + sizeof(event.camera_pose_set_by_this_command)
+                        || !event.camera_pose)
+                        return 0;
+                    object->on_view_frame({ from_c_camera_pose(*event.camera_pose), event.frame_time_seconds, 0 != event.camera_changed,
+                        0 != event.camera_pose_set_by_this_command });
+                    return 1;
+                case LOP_EVENT_BANNER_ACTION:
+                    if (event.size_bytes < offsetof(lop_event, banner_action_name) + sizeof(event.banner_action_name))
+                        return 0;
+                    start_event_task(object->on_banner_action(event.banner_action_name ? event.banner_action_name : ""));
                     return 1;
                 default:
                     return 0;
@@ -2115,11 +2355,11 @@ namespace lop
             return 0;
         }
 
-        // Destroys the coroutines of the panel events and on_start, including the suspended ones, before the command object they use.
+        // Destroys the coroutines of the panel and banner events and on_start, including the suspended ones, before the command object they use.
         inline void destroy(void* const instance) noexcept
         {
             std::unique_ptr<CommandInstance> command{ static_cast<CommandInstance*>(instance) };
-            command->panel_event_tasks.clear();
+            command->event_tasks.clear();
             command->on_start_task.reset();
             command->object.reset();
         }

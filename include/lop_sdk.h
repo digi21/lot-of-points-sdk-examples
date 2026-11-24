@@ -21,7 +21,7 @@ extern "C" {
 #define LOP_SDK_MAKE_API_VERSION(major, minor) ((uint32_t)(((uint32_t)(major) << 16) | (uint32_t)(minor)))
 #define LOP_SDK_API_VERSION_MAJOR(version) ((uint32_t)(version) >> 16)
 #define LOP_SDK_API_VERSION_MINOR(version) ((uint32_t)(version) & 0xFFFFu)
-#define LOP_SDK_API_VERSION LOP_SDK_MAKE_API_VERSION(0, 7)
+#define LOP_SDK_API_VERSION LOP_SDK_MAKE_API_VERSION(0, 8)
 
 #ifdef _WIN32
 #define LOP_SDK_EXPORT __declspec(dllexport)
@@ -84,17 +84,20 @@ typedef struct lop_point
     uint32_t cloud_id;          /* Identifies an open cloud with a nonzero ID; opening or closing other clouds preserves the ID.
      * Closing and reopening this cloud assigns a new ID. */
     uint16_t intensity;         /* Contains intensity reconstructed on the original scale from the stored normalized value and the cloud maximum. */
-    uint8_t classification;     /* Includes confirmed classification edits. */
+    uint8_t classification;     /* Includes confirmed classification edits; see lop_point_block::classification for LAS point formats 0-5. */
     uint8_t return_number;      /* 1-15; 0 if the file does not have it */
     uint8_t number_of_returns;  /* 1-15; 0 if the file does not have it */
     uint8_t red;                /* 0-255; 0 if the cloud has no colour */
     uint8_t green;
     uint8_t blue;
+    uint8_t classification_flags;   /* SDK 0.8. Bits 0-3 as LOP_CLASSIFICATION_FLAG_*, bits 4-7 are 0; 0 if the cloud lacks
+                                     * LOP_FIELD_CLASSIFICATION_FLAGS. Occupies padding of earlier versions: sizeof(lop_point) does not change. */
 } lop_point;
 
 /* Stores point_count points in columns using lop_point field semantics; index i identifies the same point in every column.
  * The host owns the memory, which remains valid until release_points of the host that delivered the points, or until that host ends:
- * destroy for a lop_command_host, the return of the background task function for a lop_task_host. */
+ * destroy for a lop_command_host, the return of the background task function for a lop_task_host. This structure has no column for
+ * lop_point::classification_flags: get_points_classification_flags of the host that delivered the points returns that column. */
 typedef struct lop_points
 {
     uint64_t point_count;
@@ -116,8 +119,16 @@ typedef struct lop_points
 } lop_points;
 
 /* Identifies stored optional attributes in lop_cloud::extra_fields; process_tiles loads the fields requested by required_extra_fields. */
-#define LOP_FIELD_GPS_TIME          (1u << 0)
-#define LOP_FIELD_POINT_SOURCE_ID   (1u << 1)
+#define LOP_FIELD_GPS_TIME              (1u << 0)
+#define LOP_FIELD_POINT_SOURCE_ID       (1u << 1)
+/* SDK 0.8. The level of detail stores the classification flags (LOP_CLASSIFICATION_FLAG_*) apart from the class: clouds whose original is a
+ * LAS or LAZ file of point formats 6 to 10, and the points of add_points. A level of detail created before lop stored the attributes of each
+ * point (.index.atributos) lacks this field; recreating the level of detail adds it. A cloud whose original is a LAS or LAZ file of point
+ * formats 0 to 5 lacks this field: its classification is the whole classification byte, with the class in bits 0-4 and the synthetic,
+ * key-point and withheld flags in bits 5-7, both when lop reads the original file and when it reads the level of detail. For point formats
+ * 6 to 10, classification is the 8-bit class and the flags are in the classification_flags columns. E57, PTX, PTS and PCD clouds lack this
+ * field. */
+#define LOP_FIELD_CLASSIFICATION_FLAGS  (1u << 2)
 
 /* Describes an open cloud at the time of the clouds call or request. */
 typedef struct lop_cloud
@@ -185,9 +196,12 @@ typedef struct lop_tile
     uint64_t tile_index;                    /* Uses a zero-based tile index across the call: cloud by cloud, with rows ordered by increasing Y. */
     uint64_t tile_count;
     uint32_t cloud_id;                      /* Identifies the cloud that contains the tile. */
+    uint8_t const* classification_flags;    /* SDK 0.8. NULL unless required_extra_fields includes LOP_FIELD_CLASSIFICATION_FLAGS; bits 0-3
+                                             * as LOP_CLASSIFICATION_FLAG_*, bits 4-7 are 0. */
 } lop_tile;
 
-/* LAS 1.4 classification flags of lop_added_points::classification_flags. */
+/* LAS 1.4 classification flags of the classification_flags columns and fields (lop_added_points, lop_tile, lop_point_block, lop_point and
+ * get_points_classification_flags). */
 #define LOP_CLASSIFICATION_FLAG_SYNTHETIC  (1u << 0)
 #define LOP_CLASSIFICATION_FLAG_KEY_POINT  (1u << 1)
 #define LOP_CLASSIFICATION_FLAG_WITHHELD   (1u << 2)
@@ -293,7 +307,11 @@ typedef struct lop_point_block
     uint64_t const* original_point_index;   /* Like lop_point::original_point_index; LOP_UNKNOWN_ORIGINAL_POINT_INDEX if the cloud has no stored indices. */
     uint16_t const* intensity;              /* The value of the original file when from_level_of_detail is zero; the value reconstructed like
                                              * lop_tile::intensity otherwise. */
-    uint8_t const* classification;
+    uint8_t const* classification;          /* For a cloud whose original is a LAS or LAZ file of point formats 0 to 5, the whole classification
+                                             * byte: the class in bits 0-4 and the synthetic, key-point and withheld flags in bits 5-7, both from
+                                             * the original file and from the level of detail. For point formats 6 to 10, the 8-bit class; the
+                                             * flags are in classification_flags. A confirmed classification edit replaces the value with the
+                                             * assigned class, and the points of add_points have the class that add_points received. */
     uint8_t const* return_number;
     uint8_t const* number_of_returns;
     uint8_t const* red;                     /* 0-255, like lop_tile::red: the colour of the original file scaled with the colour factor that lop
@@ -304,6 +322,8 @@ typedef struct lop_point_block
     uint16_t const* point_source_id;        /* NULL unless required_extra_fields includes LOP_FIELD_POINT_SOURCE_ID. */
     uint32_t cloud_id;
     int from_level_of_detail;               /* Nonzero if lop reads the cloud from its level of detail, zero if from its original file. */
+    uint8_t const* classification_flags;    /* SDK 0.8. Like lop_tile::classification_flags, from the original file or from the level of
+                                             * detail. */
 } lop_point_block;
 
 /* SDK 0.6. Receives one block of read_cloud_points on the thread that called read_cloud_points. Returns LOP_OK to receive the next block,
@@ -645,6 +665,22 @@ typedef struct lop_task_host
      * task, a cloud that a process_tiles call without LOP_TILES_READ_ONLY, a read_cloud_points call or an export_cloud call of this task is
      * using, a cloud outside the cloud_ids of the open editing event, or a write failure. */
     int (*commit_point_changes)(void* context, uint32_t cloud_id, lop_point_changes const* changes, lop_point_changes_summary* summary);
+
+    /* SDK 0.8. Marks the tab of the panel panel_id, which a lop_panel of the extension of this task declares, to tell the user that the panel
+     * has new content, without opening, activating or docking the panel: while the content of the panel is not on screen, the tab pulses until
+     * the user shows the content, and a panel in auto-hide mode moves partly away from the edge where it is hidden and then returns to its hidden position. lop checks panel_id on the calling thread,
+     * queues the mark on the user interface thread after the set_ui_value and set_ui_rows calls that this thread made before calling mark_panel_for_attention, and returns
+     * without waiting. Returns LOP_OK, also if the panel is closed or its content is on screen, which leaves the tab unchanged; or LOP_FAILED
+     * for a NULL or empty panel_id, and, with the reason in the Output panel, for a panel_id that no lop_panel of the extension declares, a
+     * panel whose license module is not enabled, or while lop is closing. */
+    int (*mark_panel_for_attention)(void* context, char const* panel_id);
+
+    /* SDK 0.8. Sets *classification_flags to a column of points->point_count elements, index i for point i, with bits 0-3 as
+     * LOP_CLASSIFICATION_FLAG_* and bits 4-7 at 0, for points that points_in_sphere of this host delivered and release_points has not
+     * released; the column remains valid until release_points. The element of a point whose cloud lacks LOP_FIELD_CLASSIFICATION_FLAGS is 0.
+     * Sets *classification_flags to NULL if point_count is 0 or no cloud of the points has that field. Returns LOP_OK, or LOP_FAILED for
+     * NULL points or classification_flags, or for points that this host did not deliver or has released. */
+    int (*get_points_classification_flags)(void* context, lop_points const* points, uint8_t const** classification_flags);
 } lop_task_host;
 
 /* Maximum length of the name of lop_task_host::set_class_name, in bytes of UTF-8, without the terminating null. */
@@ -677,13 +713,18 @@ typedef enum lop_event_type
                                          * Actions[panel_action_name] of the panel that this command owns (lop_command_panel). Before
                                          * delivering it, lop finishes the commands above this command in the command stack. lop ignores
                                          * the result of on_event. */
-    LOP_EVENT_PANEL_VALUE_CHANGED = 13  /* Fills panel_id, panel_value_key and panel_value: the user changed Values[panel_value_key] of the
+    LOP_EVENT_PANEL_VALUE_CHANGED = 13, /* Fills panel_id, panel_value_key and panel_value: the user changed Values[panel_value_key] of the
                                          * panel that this command owns through a binding of the XAML. Not delivered for set_ui_value, for
                                          * the values that the bindings write while lop applies set_ui_value or set_ui_rows, nor for the
                                          * values that the bindings write when lop shows the panel. Before delivering it, lop finishes the
                                          * commands above this command in the command stack. lop ignores the result of on_event. A
                                          * ListView can write -1 to its
                                          * SelectedIndex when lop replaces its rows: the command must accept -1 and indices outside the list. */
+    LOP_EVENT_VIEW_FRAME = 14,          /* SDK 0.8. Fills camera_pose, frame_time_seconds, camera_changed and camera_pose_set_by_this_command
+                                         * (see lop_command_host::set_view_frame_notices). lop ignores the result of on_event. */
+    LOP_EVENT_BANNER_ACTION = 15        /* SDK 0.8. Fills banner_action_name: the user pressed a button of the banner of this command
+                                         * (show_banner). lop delivers it also when the command is not at the top of the command stack and
+                                         * does not finish the commands above it. lop ignores the result of on_event. */
 } lop_event_type;
 
 typedef enum lop_mouse_button
@@ -717,7 +758,8 @@ typedef enum lop_request_type
     LOP_REQUEST_DIALOG = 7,             /* show_dialog: accepted */
     LOP_REQUEST_SAVE_FILE_PATH = 8,     /* request_save_file_path: file_path */
     LOP_REQUEST_ORIGINAL_TO_WORLD_TRANSFORM_CHANGE = 9, /* request_original_to_world_transform_change: accepted */
-    LOP_REQUEST_CRS = 10                /* request_crs: crs_wkt */
+    LOP_REQUEST_CRS = 10,               /* request_crs: crs_wkt */
+    LOP_REQUEST_CAMERA_ANIMATION = 11   /* SDK 0.8. request_camera_animation: no field; LOP_OK when the camera has the requested pose */
 } lop_request_type;
 
 typedef enum lop_geometry_type
@@ -770,6 +812,37 @@ typedef struct lop_temporary_geometry
 /* Maximum sum of the vertex_count values of the geometries of a show_temporary_geometries call. */
 #define LOP_MAX_TEMPORARY_GEOMETRY_VERTICES 1048576u
 
+/* SDK 0.8. A camera pose in world coordinates, the coordinates of lop_point and lop_tile, in cloud units; the world Z axis points up.
+ * look_direction and up are unit vectors and up is orthogonal to look_direction when lop fills the structure.
+ * vertical_field_of_view_degrees is the angle between the top and bottom edges of the view, in degrees. The DLL reserves this structure
+ * for get_camera_pose, set_camera_pose and request_camera_animation, so its size does not change in later versions of the SDK. */
+typedef struct lop_camera_pose
+{
+    double position[3];
+    double look_direction[3];
+    double up[3];
+    double vertical_field_of_view_degrees;
+} lop_camera_pose;
+
+/* SDK 0.8. Modes of lop_command_host::set_view_frame_notices. */
+#define LOP_VIEW_FRAME_NOTICES_NONE                 0u  /* lop delivers no LOP_EVENT_VIEW_FRAME to the command; the initial mode. */
+#define LOP_VIEW_FRAME_NOTICES_WHEN_CAMERA_CHANGES  1u  /* Only in the frames whose camera pose differs from the camera_pose of the previous
+                                                         * LOP_EVENT_VIEW_FRAME of the command, and in the first frame. */
+#define LOP_VIEW_FRAME_NOTICES_EVERY_FRAME          2u  /* In every frame that lop draws while a document is open. */
+
+/* SDK 0.8. Limits of show_banner: buttons per banner, and bytes of UTF-8 without the terminating null of the message and of each button text. */
+#define LOP_MAX_BANNER_BUTTONS              8u
+#define LOP_MAX_BANNER_MESSAGE_BYTES        1024u
+#define LOP_MAX_BANNER_BUTTON_TEXT_BYTES    128u
+
+/* SDK 0.8. A button of show_banner. The DLL passes these structures in an array, so their size does not change in later versions. */
+typedef struct lop_banner_button
+{
+    char const* text;           /* Text of the button in the language that lop_register_extension received; not empty. */
+    char const* action_name;    /* banner_action_name of the LOP_EVENT_BANNER_ACTION that the button delivers; ASCII letters, digits, '.', '_'
+                                 * or '-', not empty. */
+} lop_banner_button;
+
 /* Describes an event. Pointer fields remain valid until on_event returns; points belongs to the command (see lop_points). */
 typedef struct lop_event
 {
@@ -808,6 +881,18 @@ typedef struct lop_event
                                          * LOP_UI_VALUE_OTHER for a value that is not a double, an integer, a boolean or a text, such as the
                                          * selected item of a list. For LOP_UI_VALUE_TEXT, panel_value.text remains valid until on_event
                                          * returns. */
+    /* SDK 0.8. Read these fields only if size_bytes includes them. */
+    lop_camera_pose const* camera_pose; /* LOP_EVENT_VIEW_FRAME: the pose that lop sent to the viewer before delivering the notices of this
+                                         * frame; valid until on_event returns. A set_camera_pose during a notice applies to the frame being
+                                         * drawn and appears in camera_pose of the notices of the next frame. */
+    double frame_time_seconds;          /* LOP_EVENT_VIEW_FRAME: seconds of a monotonic clock of lop, the same value for every notice of a
+                                         * frame; the origin is arbitrary. */
+    int camera_changed;                 /* LOP_EVENT_VIEW_FRAME: nonzero if camera_pose differs, in any of its ten values, from the camera_pose
+                                         * of the previous LOP_EVENT_VIEW_FRAME of this command, or if this is the first one. */
+    int camera_pose_set_by_this_command;/* LOP_EVENT_VIEW_FRAME: nonzero if this command assigned the current pose through its last
+                                         * set_camera_pose or through the successful completion of its last request_camera_animation, and no
+                                         * other component of lop or other command has moved the camera since that assignment. */
+    char const* banner_action_name;     /* LOP_EVENT_BANNER_ACTION: the lop_banner_button::action_name of the pressed button. */
 } lop_event;
 
 /* Provides the functions of a command instance from create until destroy returns; pass context as the first argument to each function.
@@ -881,9 +966,10 @@ typedef struct lop_command_host
      * LOP_CANCELLED if the user closes the picker. Zero extension_count permits every file. */
     uint64_t (*request_file)(void* context, char const* const* extensions, uint32_t extension_count);
 
-    /* The panel and dialog functions use the identifiers that lop_panel and lop_dialog declare. show_panel, set_ui_value, get_ui_value and
-     * set_ui_rows return LOP_OK on success or LOP_FAILED on failure: no extension declares the identifier, the license module of the panel or
-     * dialog is not enabled, or an argument is invalid. show_dialog returns a request ID, or zero if the request cannot start. lop writes the
+    /* The panel and dialog functions use the identifiers that lop_panel and lop_dialog declare. show_panel, set_ui_value, get_ui_value,
+     * set_ui_rows and mark_panel_for_attention return LOP_OK on success or LOP_FAILED on failure: no extension declares the identifier, the
+     * license module of the panel or dialog is not enabled, or an argument is invalid; mark_panel_for_attention also fails for a panel that
+     * another extension declares. show_dialog returns a request ID, or zero if the request cannot start. lop writes the
      * exceptions of the host in the Output panel. */
 
     /* Shows the panel: if the panel is not in the layout, lop docks it at its initial side; then lop activates it. For a panel of
@@ -992,6 +1078,64 @@ typedef struct lop_command_host
      * or LOP_FAILED, with the reason in the Output panel, for a NULL or empty command_id, an unknown ID, a command whose requirements do not
      * hold or that requires an open document when no document is open, or after finish. */
     int (*run_command)(void* context, char const* command_id);
+
+    /* SDK 0.8. Like lop_task_host::mark_panel_for_attention for a panel of the extension of this command; lop marks the tab before returning. */
+    int (*mark_panel_for_attention)(void* context, char const* panel_id);
+
+    /* SDK 0.8. Like lop_task_host::get_points_classification_flags for points that request_points_in_sphere of this command delivered and
+     * release_points has not released. */
+    int (*get_points_classification_flags)(void* context, lop_points const* points, uint8_t const** classification_flags);
+
+    /* SDK 0.8. Fills pose with the camera pose that lop last sent to the viewer, including the rotation about look_direction applied by an animation in progress, and with
+     * the current vertical field of view. Returns LOP_OK, or LOP_FAILED for NULL pose or when no document is open. */
+    int (*get_camera_pose)(void* context, lop_camera_pose* pose);
+
+    /* SDK 0.8. Places the camera at pose, without animation, for the frame that lop draws next. lop cancels the camera animation in progress
+     * (bring_camera, request_camera_animation, the wheel or an animation of lop; a pending request_camera_animation completes with
+     * LOP_CANCELLED), normalizes look_direction, makes up orthogonal to look_direction and unit, and assigns the field of view. lop keeps the
+     * rotation about look_direction that up represents while camera_pose_set_by_this_command is nonzero (see lop_event); when another
+     * component moves the camera, the camera has no such rotation. lop does not enter a spherical photo because of the new position, and leaves the active photo if the new
+     * position is farther from the photo centre than the Photo centre margin setting. Returns LOP_OK, or LOP_FAILED without changing the
+     * camera for NULL pose, a nonfinite value, a look_direction whose length is below 1e-9, an up whose component orthogonal to
+     * look_direction is zero or below 1e-9 times the length of up, a vertical_field_of_view_degrees that is not greater than 0 and less
+     * than 180, no open document, or after finish. */
+    int (*set_camera_pose)(void* context, lop_camera_pose const* pose);
+
+    /* SDK 0.8. Starts a request that animates the camera from its current pose to the position and view direction of pose, with the duration
+     * that the Camera animations settings of lop assign to the distance, like bring_camera, and then assigns pose as set_camera_pose does,
+     * with the rotation about pose->look_direction defined by pose->up and the field of view pose->vertical_field_of_view_degrees: completes with LOP_OK when the camera has pose. Completes with LOP_CANCELLED if another movement
+     * interrupts the animation (the wheel, another animation, set_camera_pose, another request_camera_animation, an animation of another
+     * command) or if the command finishes; finishing the command stops the camera where the animation has taken it. Returns 0 for the values
+     * that set_camera_pose rejects. */
+    uint64_t (*request_camera_animation)(void* context, lop_camera_pose const* pose);
+
+    /* SDK 0.8. Assigns the LOP_VIEW_FRAME_NOTICES_* mode of the LOP_EVENT_VIEW_FRAME notices of this command; the initial mode is
+     * LOP_VIEW_FRAME_NOTICES_NONE. lop delivers the notices on the user interface thread, before drawing the frame, after moving the
+     * camera for the animations and the game controller: in every frame for LOP_VIEW_FRAME_NOTICES_EVERY_FRAME, and in the first frame and
+     * in each frame whose pose differs from the pose of the previous notice for LOP_VIEW_FRAME_NOTICES_WHEN_CAMERA_CHANGES. lop delivers them to every command instance of the command stack whose mode is not
+     * LOP_VIEW_FRAME_NOTICES_NONE, also below the top of the stack, in the order in which the instances assigned their mode, until the
+     * instance finishes. lop delivers no notice while no document is open. Returns LOP_OK, or LOP_FAILED for an unknown mode or after
+     * finish. */
+    int (*set_view_frame_notices)(void* context, uint32_t mode);
+
+    /* SDK 0.8. Shows the banner of this command over the view, with message (NULL or "" shows no message), a progress bar with progress
+     * from 0 to 1, inclusive (a negative value shows no bar) and the buttons[0..button_count); lop copies the texts before returning. A press of a button
+     * delivers LOP_EVENT_BANNER_ACTION to this command. The banner replaces the banner shown before, of this or another command, while no
+     * command launched by the user (with a ribbon button, a key, a banner, a panel or run_command) is above this command in the command stack;
+     * otherwise lop keeps the content and shows it when that condition holds again. lop removes the banner when the command finishes.
+     * Returns LOP_OK, or LOP_FAILED without changing the banner for a message longer than LOP_MAX_BANNER_MESSAGE_BYTES, a progress that is
+     * NaN or greater than 1, more than LOP_MAX_BANNER_BUTTONS buttons, NULL buttons with nonzero button_count, a button text that is NULL,
+     * empty or longer than LOP_MAX_BANNER_BUTTON_TEXT_BYTES, an action_name that is NULL, empty or contains characters other than ASCII letters, digits, '.', '_' and '-', or after finish. */
+    int (*show_banner)(void* context, char const* message, double progress, lop_banner_button const* buttons, uint32_t button_count);
+
+    /* SDK 0.8. Removes the visible banner of this command and discards any banner content stored for this command; does nothing if the command has no banner or has finished. */
+    void (*hide_banner)(void* context);
+
+    /* SDK 0.8. With nonzero kept, launching a command that cancels previous commands leaves this command in the command stack, below the new
+     * command; the ribbon button of this command finishes it from any position of the stack, and Esc finishes it while it is at the top.
+     * With zero, the initial value, launching such a command finishes this command, unless the command owns its panel (lop_command_panel).
+     * Returns LOP_OK, or LOP_FAILED after finish. */
+    int (*set_kept_below_new_commands)(void* context, int kept);
 } lop_command_host;
 
 /* Maximum length of the file_type_name of lop_command_host::request_save_file_path, in bytes of UTF-8, without the terminating null. */
@@ -1120,6 +1264,8 @@ typedef struct lop_extension_host
     /* Like the lop_command_host functions with the same names; lop copies the rows before returning. */
     int (*set_ui_value)(void* context, char const* panel_or_dialog_id, char const* key, lop_ui_value const* value);
     int (*set_ui_rows)(void* context, char const* panel_or_dialog_id, char const* list_key, lop_ui_row const* rows, uint32_t row_count);
+    /* SDK 0.8. Like lop_command_host::mark_panel_for_attention for a panel of this extension. */
+    int (*mark_panel_for_attention)(void* context, char const* panel_id);
 } lop_extension_host;
 
 /* When lop reopens the document, lop delivers every LOP_CLOUD_CLOSING and then every LOP_CLOUD_ADDED, in Layers panel order; cloud is valid
