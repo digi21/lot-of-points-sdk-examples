@@ -255,8 +255,14 @@ class PlayCameraPathCommand(lop.Command):
         self._is_animating_to_first_pose = False
 
     async def _open_file(self):
-        """Asks for a .lopcamerapath file and reads it; logs the reason and returns None for a file that cannot be read."""
-        file_path = await self.host.ask_file([CAMERA_PATH_EXTENSION])
+        """Asks for a .lopcamerapath file and reads it; logs the reason and returns None if the file picker fails or the file cannot be
+        read."""
+        try:
+            file_path = await self.host.ask_file([CAMERA_PATH_EXTENSION])
+        except lop.RequestFailed as exception:
+            # lop writes the reason of the failure in the Output panel; this line adds the RequestFailed text.
+            self.host.log(str(exception))
+            return None
         if file_path is None:
             return None
         try:
