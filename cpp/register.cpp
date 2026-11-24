@@ -20,8 +20,8 @@ namespace
             extension.commands.push_back(std::move(declaration));
         for (auto& declaration : declare_camera_path_commands(language))
             extension.commands.push_back(std::move(declaration));
-        // The commands in the same ribbon section or the same new tab must have the same name in every language, or lop shows one section or
-        // one tab per name.
+        // In each interface language, the commands that share a new tab must declare the same new_tab_title, and the commands that share a
+        // ribbon section within a tab the same ribbon_section; otherwise lop shows one tab or one section per title.
         for (auto& declaration : extension.commands)
         {
             if (!declaration.existing_tab_id.empty() || !declaration.new_tab_title.empty())
